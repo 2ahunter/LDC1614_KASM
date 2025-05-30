@@ -16,47 +16,47 @@ uint16_t byteswap(uint16_t value){
     return (msb | lsb); // Combine MSB and LSB
 }
 
-int ldc1614_init(int fd, int channel) {
+int ldc1614_init(int i2c_fd, int channel) {
     int result = 0;
     // Set up the LDC1614 with default values (see p 51 of the datasheet)
-    result = ldc1614_write_reg(fd, LDC1614_RCOUNT0, 0xFFFF); // Max conversion interval
+    result = ldc1614_write_reg(i2c_fd, LDC1614_RCOUNT0, 0xFFFF); // Max conversion interval
     if (result == -1) {
         fprintf(stderr, "Failed to write RCOUNT0: %s\n", strerror(errno));
         return -1; // Error
     }
-    result = ldc1614_write_reg(fd, LDC1614_SETTLECOUNT0, 0x000A); // Settle time
+    result = ldc1614_write_reg(i2c_fd, LDC1614_SETTLECOUNT0, 0x000A); // Settle time
     if (result == -1) {
         fprintf(stderr, "Failed to write SETTLECOUNT0: %s\n", strerror(errno));
         return -1; // Error
     }
-    result = ldc1614_write_reg(fd, LDC1614_CLOCK_DIVIDERS0, 0x1002); // No clock division
+    result = ldc1614_write_reg(i2c_fd, LDC1614_CLOCK_DIVIDERS0, 0x1002); // No clock division
     if (result == -1) {
         fprintf(stderr, "Failed to write CLOCK_DIVIDERS0: %s\n", strerror(errno));
         return -1; // Error
     }
-    result = ldc1614_write_reg(fd, LDC1614_ERROR_CONFIG, 0x0000); // No error reporting
+    result = ldc1614_write_reg(i2c_fd, LDC1614_ERROR_CONFIG, 0x0000); // No error reporting
     if (result == -1) {
         fprintf(stderr, "Failed to write ERROR_CONFIG: %s\n", strerror(errno));
         return -1; // Error
     }
     // Enable Channel 0 in continuous mode, set Input deglitch bandwidth to 3.3MHz
-    result = ldc1614_write_reg(fd, LDC1614_MUX_CONFIG, 0x020C); 
+    result = ldc1614_write_reg(i2c_fd, LDC1614_MUX_CONFIG, 0x020C); 
     if (result == -1) {
         fprintf(stderr, "Failed to write MUX_CONFIG: %s\n", strerror(errno));
         return -1; // Error
     }
     //Manually set sensor drive current on channel 0
-	result = ldc1614_write_reg(fd, LDC1614_DRIVE_CURRENT0, 0x9000);
+	result = ldc1614_write_reg(i2c_fd, LDC1614_DRIVE_CURRENT0, 0x9000);
     if (result == -1) {
         fprintf(stderr, "Failed to write DRIVE_CURRENT0: %s\n", strerror(errno));
         return -1; // Error
     }
     // Select active channel = ch 0, disable auto-amplitude correction and autocalibration, 
     // enable full current drive during sensor activation, select
-	// internal clock source, wake up device to start conversion. This register
+	// external clock source, wake up device to start conversion. This register
 	// write must occur last because device configuration is not permitted while
 	// the LDC is in active mode.
-	result = ldc1614_write_reg(fd, LDC1614_CONFIG, 0x1201);
+	result = ldc1614_write_reg(i2c_fd, LDC1614_CONFIG, 0x1601);
     if (result == -1) {
         fprintf(stderr, "Failed to write CONFIG: %s\n", strerror(errno));
         return -1; // Error
