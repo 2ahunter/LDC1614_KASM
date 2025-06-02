@@ -2,7 +2,7 @@ objects = ldc1614.o main.o
 
 CFLAGS = -Wall -Wextra -pedantic -std=gnu17
 
-LDLIBS = -lwiringPi
+LDLIBS = -lwiringPi -lc
 
 
 ldc_test: $(objects)
