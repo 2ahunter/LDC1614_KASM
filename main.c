@@ -1,4 +1,3 @@
-#include "ldc1614.h"
 #include <wiringPi.h>
 #include <wiringPiI2C.h>
 #include <stdio.h>
@@ -6,11 +5,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include<unistd.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <syslog.h>
 #include <time.h>
+#include "ldc1614.h"
 
+
+/**
+ * @brief Calculate the elapsed time between two timespec structures.
+ * @param start The starting time.
+ * @param end The ending time.
+ * @return A timespec structure representing the elapsed time.
+ */
 struct timespec get_elapsed_time(struct timespec start, struct timespec end) {
     struct timespec elapsed;
     if ((end.tv_nsec - start.tv_nsec) < 0) { // account for nanosecond overflow
@@ -27,8 +34,7 @@ struct timespec get_elapsed_time(struct timespec start, struct timespec end) {
 
 int main(int argc, char *argv[]) {
 
-
-    // variables 
+    // private variables 
     int opt = 0; // option for command line argument parsing
     int devID = 0x3055; // Device ID for LDC1614
     int i2c_fd = 0; // File descriptor for LDC1614 I2C bus
@@ -39,15 +45,16 @@ int main(int argc, char *argv[]) {
     char logfile[50] = "./testing/ldc1614_log.csv"; // default logfile name
     int log_fd = -1; // File descriptor for log file
     int num_samples = 100; // default number of samples to read
-    struct timespec start_time; // For time measurement
-    struct timespec current_time; 
-    struct timespec elapsed_time; // Timestamp for datalogging
+    struct timespec start_time; // t0
+    struct timespec current_time; // t 
+    struct timespec elapsed_time; // Timestamp for datalogging (t - t0)
 
     // Initialize the timer and logger 
     clock_gettime(CLOCK_MONOTONIC, &start_time); // Start time measurement
     openlog(NULL, LOG_PERROR, LOG_LOCAL6); // Open syslog for logging
     syslog(LOG_INFO, "Starting LDC1614 data collection program.\n");
 
+    // Parse command line arguments for logfile, and number of samples
     while ((opt = getopt(argc, argv, "n:l:")) != -1) {
         switch(opt) {
             case 'l':
@@ -99,7 +106,7 @@ int main(int argc, char *argv[]) {
         syslog(LOG_INFO, "LDC1614 Device ID: 0x%04X verified\n", ID);
     }
 
-    // Open the log file for writing only, create it if it doesn't exist, and truncate it to 0 if it does
+    // Open the log file for writing only, create it if non-existent, and overwrite it if it exists
     log_fd = open(logfile, O_WRONLY | O_CREAT | O_TRUNC, 0666); // 
     if (log_fd == -1 ) {
         fprintf(stderr, "Failed to open log file %s: %s\n", logfile, strerror(errno));
@@ -112,36 +119,35 @@ int main(int argc, char *argv[]) {
         return -1; // Exit if writing header fails
     }
 
+    // Get the data from the LDC1614 and log to a file
     for(int i=0; i<num_samples; i++) {
         status = 0;
         while(status == 0) {
             ldc1614_read_reg(i2c_fd, LDC1614_STATUS, &status);
             status = status & 0x08; // Check if data is ready
         }
-
         ret = ldc1614_read_ch0(i2c_fd, &value);
         if (ret == -1) {
-            syslog(LOG_ERR, "Failed to read channel 0 value: %s\n", strerror(errno));
+            syslog(LOG_ERR, "Failed to read value: %s\n", strerror(errno));
             // return -1;
         } else {
             clock_gettime(CLOCK_MONOTONIC, &current_time); // Get current time for timestamp
             elapsed_time = get_elapsed_time(start_time, current_time); // Calculate elapsed time
-            char data_line[80]; // Buffer for log data line
-            int line_length = 0; // Length of the data line
-            line_length =  sprintf( data_line, "%d, %d.%09d, %d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // put data into a string
+            char data_line[80]; 
+            int line_length = 0; 
+            line_length =  sprintf( data_line, "%d, %d.%09d, %d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // format data into a string
             if (write(log_fd, data_line, line_length) == -1) {
                 syslog(LOG_ERR, "Failed to write data to log file: %s", strerror(errno));
                 fprintf(stderr, "Failed to write data to log file: %s\n", strerror(errno));
                 close(log_fd);
-                return -1; // Exit if writing data fails
+                return -1; // Exit with error if data write fails
             }
-            // syslog(LOG_INFO, "Channel %d value: %u", channel, value); // Log to syslog
         }
     }
 
-    close(log_fd); // Close the log file after writing all samples
+    close(log_fd); 
     syslog(LOG_INFO, "Data collection complete.\n");
-    closelog(); // Close syslog after logging
-    return 0; // Exit successfully
+    closelog();
+    return 0;
 
 }
