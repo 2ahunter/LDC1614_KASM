@@ -9,23 +9,42 @@
 #include<unistd.h>
 #include <fcntl.h>
 #include <syslog.h>
+#include <time.h>
 
+struct timespec get_elapsed_time(struct timespec start, struct timespec end) {
+    struct timespec elapsed;
+    if ((end.tv_nsec - start.tv_nsec) < 0) { // account for nanosecond overflow
+        elapsed.tv_sec = end.tv_sec - start.tv_sec - 1;
+        elapsed.tv_nsec = 1000000000 + end.tv_nsec - start.tv_nsec;
+    }
+    else {
+        elapsed.tv_sec = end.tv_sec - start.tv_sec;
+        elapsed.tv_nsec = end.tv_nsec - start.tv_nsec;
+    }
+    return elapsed;
+}
 
-
-int devID = 0x3055; // Device ID for LDC1614
-int i2c_fd = 0; // File descriptor for LDC1614 I2C bus
-int channel = 0; // Default channel to use
-uint32_t value = 0; // Variable to hold measurement value
-uint16_t status = 0; // Variable to hold status register value
-int ret = 0; // Return value for function calls
 
 int main(int argc, char *argv[]) {
 
+
+    // variables 
     int opt = 0; // option for command line argument parsing
+    int devID = 0x3055; // Device ID for LDC1614
+    int i2c_fd = 0; // File descriptor for LDC1614 I2C bus
+    int channel = 0; // Default channel to use
+    uint32_t value = 0; // Variable to hold measurement value
+    uint16_t status = 0; // Variable to hold status register value
+    int ret = 0; // Return value for function calls
     char logfile[50] = "./testing/ldc1614_log.csv"; // default logfile name
     int log_fd = -1; // File descriptor for log file
     int num_samples = 100; // default number of samples to read
+    struct timespec start_time; // For time measurement
+    struct timespec current_time; 
+    struct timespec elapsed_time; // Timestamp for datalogging
 
+    // Initialize the timer and logger 
+    clock_gettime(CLOCK_MONOTONIC, &start_time); // Start time measurement
     openlog(NULL, LOG_PERROR, LOG_LOCAL6); // Open syslog for logging
     syslog(LOG_INFO, "Starting LDC1614 data collection program.\n");
 
@@ -86,7 +105,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Failed to open log file %s: %s\n", logfile, strerror(errno));
         return -1; // Exit if log file cannot be opened
     }
-    char log_header[] = "Channel, Value\n"; // Header for log file
+    char log_header[] = "Channel, Timestamp, Value\n"; // Header for log file
     if (write(log_fd, log_header, sizeof(log_header) - 1) == -1) {
         fprintf(stderr, "Failed to write header to log file: %s\n", strerror(errno));
         close(log_fd);
@@ -105,9 +124,11 @@ int main(int argc, char *argv[]) {
             syslog(LOG_ERR, "Failed to read channel 0 value: %s\n", strerror(errno));
             // return -1;
         } else {
+            clock_gettime(CLOCK_MONOTONIC, &current_time); // Get current time for timestamp
+            elapsed_time = get_elapsed_time(start_time, current_time); // Calculate elapsed time
             char data_line[80]; // Buffer for log data line
             int line_length = 0; // Length of the data line
-            line_length =  sprintf( data_line, "%d, %d\n", channel, value); // put data into a string
+            line_length =  sprintf( data_line, "%d, %d.%09d, %d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // put data into a string
             if (write(log_fd, data_line, line_length) == -1) {
                 syslog(LOG_ERR, "Failed to write data to log file: %s", strerror(errno));
                 fprintf(stderr, "Failed to write data to log file: %s\n", strerror(errno));
