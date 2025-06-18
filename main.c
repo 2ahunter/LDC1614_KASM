@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
     syslog(LOG_INFO, "Starting LDC1614 data collection program.\n");
 
     // Parse command line arguments for logfile, and number of samples
-    while ((opt = getopt(argc, argv, "n:l:")) != -1) {
+    while ((opt = getopt(argc, argv, "hn:l:")) != -1) {
         switch(opt) {
             case 'l':
                 strncpy(logfile, optarg, sizeof(logfile) - 1); // Set logfile name
