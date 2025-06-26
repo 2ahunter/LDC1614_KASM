@@ -10,6 +10,12 @@
 #include <syslog.h>
 #include <time.h>
 #include "ldc1614.h"
+#include "UDP_client.h"
+
+
+char ip[]="127.0.0.0";
+char port[] = "2345";
+
 
 
 /**
@@ -48,6 +54,7 @@ int main(int argc, char *argv[]) {
     struct timespec start_time; // t0
     struct timespec current_time; // t 
     struct timespec elapsed_time; // Timestamp for datalogging (t - t0)
+    int16_t cmd_val = 0;
 
     // Initialize the timer and logger 
     clock_gettime(CLOCK_MONOTONIC, &start_time); // Start time measurement
@@ -55,7 +62,7 @@ int main(int argc, char *argv[]) {
     syslog(LOG_INFO, "Starting LDC1614 data collection program.\n");
 
     // Parse command line arguments for logfile, and number of samples
-    while ((opt = getopt(argc, argv, "hn:l:")) != -1) {
+    while ((opt = getopt(argc, argv, "hn:l:v:")) != -1) {
         switch(opt) {
             case 'l':
                 strncpy(logfile, optarg, sizeof(logfile) - 1); // Set logfile name
@@ -70,25 +77,59 @@ int main(int argc, char *argv[]) {
                     return -1; // Exit if invalid number of samples
                 }
                 break;
+            case 'v':
+                cmd_val = atoi(optarg);
+                syslog(LOG_INFO, "Command value set to %d", cmd_val);
+                break;
             default:
-                fprintf(stderr, "Usage: %s [-l logfile] [-n num_samples]\n", argv[0]);
+                fprintf(stderr, "Usage: %s [-l logfile] [-n num_samples] [-v command]\n", argv[0]);
                 return -1; // Exit on invalid option
         }
     }
+
+        // Initialize the UDP communication to the KASM PCB
+    int fd=0;
+    fd = UDP_init(ip, port);
+
+    if(fd<0){
+        syslog(LOG_ERR, "Failed to get socket descriptor");
+        exit(EXIT_FAILURE);
+    } else{
+        syslog(LOG_INFO, "UDP client initialized");
+    }
+
+    // send a command string to KASM PCB:
+    union CMD_DATA cmd_data, buf_data;
+
+    for(int i = 0; i < CMD_SIZE/2; i++){
+        int16_t value = cmd_val; 
+        cmd_data.values[i] = value;
+        buf_data.values[i] = htons(value);
+    }
+
+    /* print the values*/
+    for(int i = 0; i < CMD_SIZE/2; i++){
+        printf("Value %d: %d\n", i, cmd_data.values[i]);
+    }
+
+    /* send command buffer values */
+    size_t bytes_sent = UDP_send(buf_data);
+
+    printf("Sent %zu bytes\n", bytes_sent);
 
     // Initialize wiringPi library and get the file descriptor for I2C communication
     i2c_fd = wiringPiI2CSetup(LDC1614_ADDR);
     uint16_t ID = 0;
 
     if (i2c_fd == -1) {
-        fprintf(stderr, "Failed to initialize I2C communication: %s\n", strerror(errno));
+        syslog(LOG_ERR,"Failed to initialize I2C peripheral: %s\n", strerror(errno));
         return -1;
     }
-    syslog(LOG_INFO, "I2C device initialized.\n");
+    syslog(LOG_INFO, "I2C peripheral initialized.\n");
 
     // Initialize the LDC1614 for the specified channel 
     if (ldc1614_init(i2c_fd, channel) != 0) {
-        fprintf(stderr, "Failed to initialize LDC1614 on channel %d: %s\n", channel, strerror(errno));
+        syslog(LOG_ERR, "Failed to initialize LDC1614 on channel %d: %s\n", channel, strerror(errno));
         return -1;
     }
     syslog(LOG_DEBUG, "LDC1614 initialized on channel %d.\n", channel);
@@ -135,7 +176,7 @@ int main(int argc, char *argv[]) {
             elapsed_time = get_elapsed_time(start_time, current_time); // Calculate elapsed time
             char data_line[80]; 
             int line_length = 0; 
-            line_length =  sprintf( data_line, "%d, %d.%09d, %d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // format data into a string
+            line_length =  sprintf( data_line, "%d, %ld.%09ld, %d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // format data into a string
             if (write(log_fd, data_line, line_length) == -1) {
                 syslog(LOG_ERR, "Failed to write data to log file: %s", strerror(errno));
                 fprintf(stderr, "Failed to write data to log file: %s\n", strerror(errno));
