@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
                 num_samples = atoi(optarg); // Set number of samples to read
                 syslog(LOG_INFO, "Number of samples: %d\n", num_samples);
                 if (num_samples <= 0 || num_samples > 1000) { // Validate number of samples
-                    fprintf(stderr, "Number of samples must be greater than 0 and less than 1000.\n");
+                    syslog(LOG_ERR, "Number of samples must be greater than 0 and less than 1000.\n");
                     return -1; // Exit if invalid number of samples
                 }
                 break;
@@ -112,10 +112,10 @@ int main(int argc, char *argv[]) {
         printf("Value %d: %d\n", i, cmd_data.values[i]);
     }
 
-    /* send command buffer values */
-    size_t bytes_sent = UDP_send(buf_data);
+    // /* send command buffer values */
+    // size_t bytes_sent = UDP_send(buf_data);
 
-    printf("Sent %zu bytes\n", bytes_sent);
+    // printf("Sent %zu bytes\n", bytes_sent);
 
     // Initialize wiringPi library and get the file descriptor for I2C communication
     i2c_fd = wiringPiI2CSetup(LDC1614_ADDR);
@@ -183,6 +183,11 @@ int main(int argc, char *argv[]) {
                 close(log_fd);
                 return -1; // Exit with error if data write fails
             }
+        }
+        if (i==10) {
+            /* send command buffer values */
+            size_t bytes_sent = UDP_send(buf_data);
+            printf("Sent %zu bytes\n", bytes_sent);
         }
     }
 
