@@ -98,9 +98,25 @@ int main(int argc, char *argv[]) {
         syslog(LOG_INFO, "UDP client initialized");
     }
 
+
     // send a command string to KASM PCB:
     union CMD_DATA cmd_data, buf_data;
 
+
+    /* Get baseline data */
+    value = 100; // small non-zero value to initialize 
+
+    for(int i = 0; i < CMD_SIZE/2; i++){
+        cmd_data.values[i] = value;
+        buf_data.values[i] = htons(value);
+    }
+
+        // /* send command buffer values */
+    size_t bytes_sent = UDP_send(buf_data);
+    printf("Sent %zu bytes\n", bytes_sent);
+
+
+    /* Set the commanded value */
     for(int i = 0; i < CMD_SIZE/2; i++){
         int16_t value = cmd_val; 
         cmd_data.values[i] = value;
@@ -111,11 +127,6 @@ int main(int argc, char *argv[]) {
     for(int i = 0; i < CMD_SIZE/2; i++){
         printf("Value %d: %d\n", i, cmd_data.values[i]);
     }
-
-    // /* send command buffer values */
-    // size_t bytes_sent = UDP_send(buf_data);
-
-    // printf("Sent %zu bytes\n", bytes_sent);
 
     // Initialize wiringPi library and get the file descriptor for I2C communication
     i2c_fd = wiringPiI2CSetup(LDC1614_ADDR);
@@ -160,6 +171,7 @@ int main(int argc, char *argv[]) {
         return -1; // Exit if writing header fails
     }
 
+    int step_val = num_samples/2; 
     // Get the data from the LDC1614 and log to a file
     for(int i=0; i<num_samples; i++) {
         status = 0;
@@ -184,10 +196,10 @@ int main(int argc, char *argv[]) {
                 return -1; // Exit with error if data write fails
             }
         }
-        if (i==10) {
+        if (i==step_val) {
             /* send command buffer values */
             size_t bytes_sent = UDP_send(buf_data);
-            printf("Sent %zu bytes\n", bytes_sent);
+            // printf("Sent %zu bytes\n", bytes_sent);
         }
     }
 
