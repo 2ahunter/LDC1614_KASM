@@ -17,7 +17,6 @@ char ip[]="127.0.0.0";
 char port[] = "2345";
 
 
-
 /**
  * @brief Calculate the elapsed time between two timespec structures.
  * @param start The starting time.
@@ -37,6 +36,33 @@ struct timespec get_elapsed_time(struct timespec start, struct timespec end) {
     return elapsed;
 }
 
+/** 
+ * @brief send command values to actuater.
+ * @param cmd_val
+ * @return status: 0 on success, -1 on failure
+ * @note This function sends command values to the actuater via UDP.
+ * It prepares the command data and sends it using the UDP_send function.
+ */
+int send_command(int16_t cmd_val) {
+    union CMD_DATA cmd_data, buf_data;
+
+    // Prepare the command data
+    for(int i = 0; i < CMD_SIZE/2; i++) {
+        cmd_data.values[i] = cmd_val; // Set command value
+        buf_data.values[i] = htons(cmd_val); // Convert to network byte order
+    }
+
+    // Send the command buffer values
+    size_t bytes_sent = UDP_send(buf_data);
+    if (bytes_sent <= 0) {
+        fprintf(stderr, "Failed to send command data: %s\n", strerror(errno));
+        return -1; // Return error if sending fails
+    }
+    printf("Sent %zu bytes\n", bytes_sent);
+    return 0; // Return success
+
+}
+
 
 int main(int argc, char *argv[]) {
 
@@ -50,11 +76,15 @@ int main(int argc, char *argv[]) {
     int ret = 0; // Return value for function calls
     char logfile[50] = "./testing/ldc1614_log.csv"; // default logfile name
     int log_fd = -1; // File descriptor for log file
-    int num_samples = 100; // default number of samples to read
+    int num_samples = 500; // default number of samples to read
+    int num_steps = 1; // Number of steps for command value increment
+    int16_t cmd_inc = 1000; // Increment value for command
+    int16_t start_value = 100; // Starting value for command
     struct timespec start_time; // t0
     struct timespec current_time; // t 
     struct timespec elapsed_time; // Timestamp for datalogging (t - t0)
     int16_t cmd_val = 0;
+    int16_t max_cmd = 24000; // Maximum command value
 
     // Initialize the timer and logger 
     clock_gettime(CLOCK_MONOTONIC, &start_time); // Start time measurement
@@ -62,7 +92,7 @@ int main(int argc, char *argv[]) {
     syslog(LOG_INFO, "Starting LDC1614 data collection program.\n");
 
     // Parse command line arguments for logfile, and number of samples
-    while ((opt = getopt(argc, argv, "hn:l:v:")) != -1) {
+    while ((opt = getopt(argc, argv, "hn:l:v:s:")) != -1) {
         switch(opt) {
             case 'l':
                 strncpy(logfile, optarg, sizeof(logfile) - 1); // Set logfile name
@@ -78,11 +108,19 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             case 'v':
-                cmd_val = atoi(optarg);
-                syslog(LOG_INFO, "Command value set to %d", cmd_val);
+                cmd_inc = atoi(optarg);
+                syslog(LOG_INFO, "Command value increment set to %d", cmd_inc);
+                break;
+            case 's':
+                num_steps = atoi(optarg);
+                if(num_steps <= 0){
+                    syslog(LOG_ERR, "Number of steps must be greater than 0.\n");
+                    return -1; // Exit if invalid number of steps
+                }
+                syslog(LOG_INFO, "Number of steps set to %d", num_steps);
                 break;
             default:
-                fprintf(stderr, "Usage: %s [-l logfile] [-n num_samples] [-v command]\n", argv[0]);
+                fprintf(stderr, "Usage: %s [-l logfile] [-n num_samples] [-v command] [-s number of steps]\n", argv[0]);
                 return -1; // Exit on invalid option
         }
     }
@@ -98,35 +136,9 @@ int main(int argc, char *argv[]) {
         syslog(LOG_INFO, "UDP client initialized");
     }
 
-
-    // send a command string to KASM PCB:
-    union CMD_DATA cmd_data, buf_data;
-
-
     /* Get baseline data */
-    value = 100; // small non-zero value to initialize 
-
-    for(int i = 0; i < CMD_SIZE/2; i++){
-        cmd_data.values[i] = value;
-        buf_data.values[i] = htons(value);
-    }
-
-        // /* send command buffer values */
-    size_t bytes_sent = UDP_send(buf_data);
-    printf("Sent %zu bytes\n", bytes_sent);
-
-
-    /* Set the commanded value */
-    for(int i = 0; i < CMD_SIZE/2; i++){
-        int16_t value = cmd_val; 
-        cmd_data.values[i] = value;
-        buf_data.values[i] = htons(value);
-    }
-
-    /* print the values*/
-    for(int i = 0; i < CMD_SIZE/2; i++){
-        printf("Value %d: %d\n", i, cmd_data.values[i]);
-    }
+    send_command(start_value); // Send initial command value to actuater
+    usleep(100000); // Sleep for 100ms to allow actuater to settle
 
     // Initialize wiringPi library and get the file descriptor for I2C communication
     i2c_fd = wiringPiI2CSetup(LDC1614_ADDR);
@@ -171,35 +183,42 @@ int main(int argc, char *argv[]) {
         return -1; // Exit if writing header fails
     }
 
-    int step_val = num_samples/2; 
+ 
     // Get the data from the LDC1614 and log to a file
-    for(int i=0; i<num_samples; i++) {
-        status = 0;
-        while(status == 0) {
-            ldc1614_read_reg(i2c_fd, LDC1614_STATUS, &status);
-            status = status & 0x08; // Check if data is ready
-        }
-        ret = ldc1614_read_ch0(i2c_fd, &value);
-        if (ret == -1) {
-            syslog(LOG_ERR, "Failed to read value: %s\n", strerror(errno));
-            // return -1;
-        } else {
-            clock_gettime(CLOCK_MONOTONIC, &current_time); // Get current time for timestamp
-            elapsed_time = get_elapsed_time(start_time, current_time); // Calculate elapsed time
-            char data_line[80]; 
-            int line_length = 0; 
-            line_length =  sprintf( data_line, "%d, %ld.%09ld, %d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // format data into a string
-            if (write(log_fd, data_line, line_length) == -1) {
-                syslog(LOG_ERR, "Failed to write data to log file: %s", strerror(errno));
-                fprintf(stderr, "Failed to write data to log file: %s\n", strerror(errno));
-                close(log_fd);
-                return -1; // Exit with error if data write fails
+    for(int step = 0; step < num_steps; step++) {
+        for(int i=0; i < num_samples; i++) {
+            status = 0;
+            while(status == 0) {
+                ldc1614_read_reg(i2c_fd, LDC1614_STATUS, &status);
+                status = status & 0x08; // Check if data is ready
+            }
+            ret = ldc1614_read_ch0(i2c_fd, &value);
+            if (ret == -1) {
+                syslog(LOG_ERR, "Failed to read value: %s\n", strerror(errno));
+                // return -1;
+            } else {
+                clock_gettime(CLOCK_MONOTONIC, &current_time); // Get current time for timestamp
+                elapsed_time = get_elapsed_time(start_time, current_time); // Calculate elapsed time
+                char data_line[80]; 
+                int line_length = 0; 
+                line_length =  sprintf( data_line, "%d, %ld.%09ld, %d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // format data into a string
+                if (write(log_fd, data_line, line_length) == -1) {
+                    syslog(LOG_ERR, "Failed to write data to log file: %s", strerror(errno));
+                    fprintf(stderr, "Failed to write data to log file: %s\n", strerror(errno));
+                    close(log_fd);
+                    return -1; // Exit with error if data write fails
+                }
             }
         }
-        if (i==step_val) {
-            /* send command buffer values */
-            size_t bytes_sent = UDP_send(buf_data);
-            // printf("Sent %zu bytes\n", bytes_sent);
+        cmd_val += step * cmd_inc;
+        if(abs(cmd_val) > max_cmd) {
+            syslog(LOG_ERR, "Command value exceeded maximum limit of %d. Stopping data collection.", max_cmd);
+            break; 
+        }
+
+        if (send_command(cmd_val) == -1) {
+            syslog(LOG_ERR, "Failed to send command value %d: %s\n", cmd_val, strerror(errno));
+            break;
         }
     }
 
@@ -209,3 +228,4 @@ int main(int argc, char *argv[]) {
     return 0;
 
 }
+
