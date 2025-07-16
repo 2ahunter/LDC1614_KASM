@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-        cmd_val += step * cmd_inc;
+        cmd_val += cmd_inc;
         if(abs(cmd_val) > max_cmd) {
             syslog(LOG_ERR, "Command value exceeded maximum limit of %d. Stopping data collection.", max_cmd);
             break; 
