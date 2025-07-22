@@ -16,6 +16,8 @@ uint16_t byteswap(uint16_t value){
     return (msb | lsb); // Combine MSB and LSB
 }
 
+uint16_t error_config = LDC1614_AH_ERR2OUT | LDC1614_AL_ERR2OUT | LDC1614_UR_ERR2OUT | LDC1614_OR_ERR2OUT;
+
 int ldc1614_init(int i2c_fd, int channel) {
     int result = 0;
     // Set up the LDC1614 with default values (see p 51 of the datasheet)
@@ -29,12 +31,12 @@ int ldc1614_init(int i2c_fd, int channel) {
         fprintf(stderr, "Failed to write SETTLECOUNT0: %s\n", strerror(errno));
         return -1; // Error
     }
-    result = ldc1614_write_reg(i2c_fd, LDC1614_CLOCK_DIVIDERS0, 0x1002); // No clock division
+    result = ldc1614_write_reg(i2c_fd, LDC1614_CLOCK_DIVIDERS0, 0x1001); // No clock division
     if (result == -1) {
         fprintf(stderr, "Failed to write CLOCK_DIVIDERS0: %s\n", strerror(errno));
         return -1; // Error
     }
-    result = ldc1614_write_reg(i2c_fd, LDC1614_ERROR_CONFIG, 0x0000); // No error reporting
+    result = ldc1614_write_reg(i2c_fd, LDC1614_ERROR_CONFIG, error_config); 
     if (result == -1) {
         fprintf(stderr, "Failed to write ERROR_CONFIG: %s\n", strerror(errno));
         return -1; // Error

@@ -54,6 +54,20 @@
 #define LDC1614_MANUFACTURER_ID  0x7E  // Manufacturer ID
 #define LDC1614_DEVICE_ID        0x7F  // Device ID
 
+// error configs
+#define LDC1614_AL_ERR2OUT  1<<11   // report amplitude low error
+#define LDC1614_AH_ERR2OUT  1<<12   // report amplitude high error
+#define LDC1614_WD_ERR2OUT  1<<13   // report watchdog error
+#define LDC1614_OR_ERR2OUT  1<<14   // report over-range error
+#define LDC1614_UR_ERR2OUT  1<<15   // report under-range error
+
+// error codes
+#define LDC1614_ERR_UR0  1<<15   // under-range error
+#define LDC1614_ERR_OR0  1<<14   // over-range error
+#define LDC1614_ERR_WD0  1<<13   // watchdog error
+#define LDC1614_ERR_AE0  1<<12   // amplitude error
+
+
 // device status
 #define LDC1614_DATA_READY (1<<6) // Data is available 
 
