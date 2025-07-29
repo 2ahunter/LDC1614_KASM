@@ -16,7 +16,7 @@ uint16_t byteswap(uint16_t value){
     return (msb | lsb); // Combine MSB and LSB
 }
 
-uint16_t error_config = LDC1614_AH_ERR2OUT | LDC1614_AL_ERR2OUT | LDC1614_UR_ERR2OUT | LDC1614_OR_ERR2OUT;
+uint16_t error_config =LDC_DRDY_2INT| LDC1614_AH_ERR2OUT | LDC1614_AL_ERR2OUT | LDC1614_UR_ERR2OUT | LDC1614_OR_ERR2OUT;
 
 int ldc1614_init(int i2c_fd, int channel) {
     int result = 0;

@@ -55,6 +55,7 @@
 #define LDC1614_DEVICE_ID        0x7F  // Device ID
 
 // error configs
+#define LDC_DRDY_2INT  1<<0    // Data ready interrupt
 #define LDC1614_AL_ERR2OUT  1<<11   // report amplitude low error
 #define LDC1614_AH_ERR2OUT  1<<12   // report amplitude high error
 #define LDC1614_WD_ERR2OUT  1<<13   // report watchdog error
