@@ -17,6 +17,8 @@ char ip[]="127.0.0.0";
 char port[] = "2345";
 
 
+
+
 /**
  * @brief Calculate the elapsed time between two timespec structures.
  * @param start The starting time.
@@ -176,7 +178,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Failed to open log file %s: %s\n", logfile, strerror(errno));
         return -1; // Exit if log file cannot be opened
     }
-    char log_header[] = "Channel, Timestamp, Value\n"; // Header for log file
+    char log_header[] = "Channel,Timestamp,Value\n"; // Header for log file
     if (write(log_fd, log_header, sizeof(log_header) - 1) == -1) {
         fprintf(stderr, "Failed to write header to log file: %s\n", strerror(errno));
         close(log_fd);
@@ -201,7 +203,7 @@ int main(int argc, char *argv[]) {
                 elapsed_time = get_elapsed_time(start_time, current_time); // Calculate elapsed time
                 char data_line[80]; 
                 int line_length = 0; 
-                line_length =  sprintf( data_line, "%d, %ld.%09ld, %d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // format data into a string
+                line_length =  sprintf( data_line, "%d,%ld.%09ld,%d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // format data into a string
                 if (write(log_fd, data_line, line_length) == -1) {
                     syslog(LOG_ERR, "Failed to write data to log file: %s", strerror(errno));
                     fprintf(stderr, "Failed to write data to log file: %s\n", strerror(errno));

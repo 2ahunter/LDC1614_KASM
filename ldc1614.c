@@ -48,7 +48,7 @@ int ldc1614_init(int i2c_fd, int channel) {
         return -1; // Error
     }
     //Manually set sensor drive current on channel 0
-	result = ldc1614_write_reg(i2c_fd, LDC1614_DRIVE_CURRENT0, 0x9000);
+	result = ldc1614_write_reg(i2c_fd, LDC1614_DRIVE_CURRENT0, 0xb000);
     if (result == -1) {
         fprintf(stderr, "Failed to write DRIVE_CURRENT0: %s\n", strerror(errno));
         return -1; // Error
