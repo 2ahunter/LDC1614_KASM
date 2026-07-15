@@ -12,6 +12,8 @@
 #include "ldc1614.h"
 #include "UDP_client.h"
 
+#define HOME 100
+#define ZERO_SAMPLES 100
 
 char ip[]="127.0.0.0";
 char port[] = "2345";
@@ -81,7 +83,6 @@ int main(int argc, char *argv[]) {
     int num_samples = 500; // default number of samples to read
     int num_steps = 1; // Number of steps for command value increment
     int16_t cmd_inc = 1000; // Increment value for command
-    int16_t start_value = 100; // Starting value for command
     struct timespec start_time; // t0
     struct timespec current_time; // t 
     struct timespec elapsed_time; // Timestamp for datalogging (t - t0)
@@ -139,7 +140,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Get baseline data */
-    send_command(start_value); // Send initial command value to actuater
+    send_command(HOME); // Send initial command value to actuater
     usleep(100000); // Sleep for 100ms to allow actuater to settle
 
     // Initialize wiringPi library and get the file descriptor for I2C communication
@@ -178,7 +179,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Failed to open log file %s: %s\n", logfile, strerror(errno));
         return -1; // Exit if log file cannot be opened
     }
-    char log_header[] = "Channel,Timestamp,Value\n"; // Header for log file
+    char log_header[] = "Channel,Timestamp,Value,Command\n"; // Header for log file
     if (write(log_fd, log_header, sizeof(log_header) - 1) == -1) {
         fprintf(stderr, "Failed to write header to log file: %s\n", strerror(errno));
         close(log_fd);
@@ -203,7 +204,7 @@ int main(int argc, char *argv[]) {
                 elapsed_time = get_elapsed_time(start_time, current_time); // Calculate elapsed time
                 char data_line[80]; 
                 int line_length = 0; 
-                line_length =  sprintf( data_line, "%d,%ld.%09ld,%d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value); // format data into a string
+                line_length =  sprintf( data_line, "%d,%ld.%09ld,%d,%d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value, cmd_val); // format data into a string
                 if (write(log_fd, data_line, line_length) == -1) {
                     syslog(LOG_ERR, "Failed to write data to log file: %s", strerror(errno));
                     fprintf(stderr, "Failed to write data to log file: %s\n", strerror(errno));
@@ -212,6 +213,33 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
+
+        for(int i=0; i < ZERO_SAMPLES ; i++) {
+            status = 0;
+            while(status == 0) {
+                ldc1614_read_reg(i2c_fd, LDC1614_STATUS, &status);
+                status = status & 0x08; // Check if data is ready
+            }
+            ret = ldc1614_read_ch0(i2c_fd, &value);
+            if (ret == -1) {
+                syslog(LOG_ERR, "Failed to read value: %s\n", strerror(errno));
+                // return -1;
+            } else {
+                clock_gettime(CLOCK_MONOTONIC, &current_time); // Get current time for timestamp
+                elapsed_time = get_elapsed_time(start_time, current_time); // Calculate elapsed time
+                char data_line[80]; 
+                int line_length = 0; 
+                line_length =  sprintf( data_line, "%d,%ld.%09ld,%d,%d\n", channel,elapsed_time.tv_sec,elapsed_time.tv_nsec, value, HOME); // format data into a string
+                if (write(log_fd, data_line, line_length) == -1) {
+                    syslog(LOG_ERR, "Failed to write data to log file: %s", strerror(errno));
+                    fprintf(stderr, "Failed to write data to log file: %s\n", strerror(errno));
+                    close(log_fd);
+                    return -1; // Exit with error if data write fails
+                }
+            }
+        }
+
+
         cmd_val += cmd_inc;
         if(abs(cmd_val) > max_cmd) {
             syslog(LOG_ERR, "Command value exceeded maximum limit of %d. Stopping data collection.", max_cmd);
