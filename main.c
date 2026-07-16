@@ -86,6 +86,8 @@ int main(int argc, char *argv[]) {
     struct timespec start_time; // t0
     struct timespec current_time; // t 
     struct timespec elapsed_time; // Timestamp for datalogging (t - t0)
+    int start_cmd = 0;
+    int end_cmd = 0;
     int16_t cmd_val = 0;
     int16_t max_cmd = 24000; // Maximum command value
 
@@ -95,8 +97,20 @@ int main(int argc, char *argv[]) {
     syslog(LOG_INFO, "Starting LDC1614 data collection program.\n");
 
     // Parse command line arguments for logfile, and number of samples
-    while ((opt = getopt(argc, argv, "hn:l:v:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "hi:b:e:n:l:s:")) != -1) {
         switch(opt) {
+            case 'i':
+                strcpy(ip, optarg); // Set IP address
+                syslog(LOG_INFO, "IP address set to: %s\n", ip);
+                break;
+            case 'b':
+                start_cmd = atoi(optarg);
+                syslog(LOG_INFO, "Start command value set to %d", start_cmd);
+                break;
+            case 'e':
+                end_cmd = atoi(optarg);
+                syslog(LOG_INFO, "End command value set to %d", end_cmd);
+                break;
             case 'l':
                 strncpy(logfile, optarg, sizeof(logfile) - 1); // Set logfile name
                 logfile[sizeof(logfile) - 1] = '\0'; // Ensure null termination
@@ -110,10 +124,6 @@ int main(int argc, char *argv[]) {
                     return -1; // Exit if invalid number of samples
                 }
                 break;
-            case 'v':
-                cmd_inc = atoi(optarg);
-                syslog(LOG_INFO, "Command value increment set to %d", cmd_inc);
-                break;
             case 's':
                 num_steps = atoi(optarg);
                 if(num_steps <= 0){
@@ -123,7 +133,7 @@ int main(int argc, char *argv[]) {
                 syslog(LOG_INFO, "Number of steps set to %d", num_steps);
                 break;
             default:
-                fprintf(stderr, "Usage: %s [-l logfile] [-n num_samples] [-v command] [-s number of steps]\n", argv[0]);
+                fprintf(stderr, "Usage: %s [-i ip] [-b start_cmd] [-e end_cmd] [-l logfile] [-n num_samples] [-v command] [-s number of steps]\n", argv[0]);
                 return -1; // Exit on invalid option
         }
     }
@@ -188,7 +198,13 @@ int main(int argc, char *argv[]) {
 
  
     // Get the data from the LDC1614 and log to a file
+    cmd_val = start_cmd; // Initialize command value to start command
+    cmd_inc = (end_cmd - start_cmd) / num_steps; // Calculate command increment based on number of steps
     for(int step = 0; step < num_steps; step++) {
+        if (send_command(cmd_val) == -1) {
+            syslog(LOG_ERR, "Failed to send command value %d: %s\n", cmd_val, strerror(errno));
+            break;
+        }
         for(int i=0; i < num_samples; i++) {
             status = 0;
             while(status == 0) {
@@ -212,6 +228,11 @@ int main(int argc, char *argv[]) {
                     return -1; // Exit with error if data write fails
                 }
             }
+        }
+        /* Send home command for zeroing out the actuator */
+        if (send_command(HOME) == -1) {
+            syslog(LOG_ERR, "Failed to send command value %d: %s\n", HOME, strerror(errno));
+            break;
         }
 
         for(int i=0; i < ZERO_SAMPLES ; i++) {
@@ -239,16 +260,11 @@ int main(int argc, char *argv[]) {
             }
         }
 
-
+        /* update command value */
         cmd_val += cmd_inc;
         if(abs(cmd_val) > max_cmd) {
             syslog(LOG_ERR, "Command value exceeded maximum limit of %d. Stopping data collection.", max_cmd);
             break; 
-        }
-
-        if (send_command(cmd_val) == -1) {
-            syslog(LOG_ERR, "Failed to send command value %d: %s\n", cmd_val, strerror(errno));
-            break;
         }
     }
 
