@@ -12,6 +12,9 @@ ldc_test: $(objects)
 ldc_it_test: ldc_it_test.c ldc1614.o
 	cc -o $@ ldc_it_test.c ldc1614.o $(LDLIBS)
 
+ldc_service: ldc_service.c
+	cc -o $@ ldc_service.c -lpthread -li2c
+
 main.o: main.c UDP_client.o
 
 UDP_client.o: UDP_client.c UDP_client.h
